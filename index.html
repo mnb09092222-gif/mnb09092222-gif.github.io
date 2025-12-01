@@ -6,219 +6,444 @@
     
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="theme-color" content="#FF5A5F">
+    <meta name="theme-color" content="#ff595f">
     <title>Food Radar</title>
     
-    <link rel="manifest" href='data:application/manifest+json,{"name":"Food Radar","short_name":"FoodRadar","start_url":".","display":"standalone","background_color":"#ffffff","theme_color":"#FF5A5F","icons":[{"src":"https://cdn-icons-png.flaticon.com/512/1046/1046784.png","sizes":"192x192","type":"image/png"}]}' />
+    <link rel="manifest" href='data:application/manifest+json,{"name":"Food Radar","short_name":"FoodRadar","start_url":".","display":"standalone","background_color":"#ffffff","theme_color":"#ff595f","icons":[{"src":"https://cdn-icons-png.flaticon.com/512/1046/1046784.png","sizes":"192x192","type":"image/png"}]}' />
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <style>
-        :root { --primary-color: #FF5A5F; --bg-color: #f7f7f7; --card-bg: #ffffff; }
+        /* --- 核心樣式設定 --- */
+        :root {
+            --primary: #ff595f; /* Food Radar 的招牌紅 */
+            --primary-dark: #e0484e;
+            --text-dark: #333;
+            --text-gray: #777;
+            --shadow: 0 4px 20px rgba(0,0,0,0.15);
+        }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background-color: var(--bg-color);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             margin: 0; padding: 0;
+            height: 100vh; width: 100vw;
             display: flex; flex-direction: column;
-            height: 100vh; overflow: hidden;
-            -webkit-user-select: none;
+            overflow: hidden;
+            background: #f8f9fa;
+            -webkit-user-select: none; user-select: none;
         }
+
+        /* 頂部導航列 */
         header {
-            background-color: var(--primary-color); color: white;
-            padding: 15px 0; text-align: center;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1); z-index: 1000;
-            padding-top: env(safe-area-inset-top);
+            background: var(--primary);
+            color: white;
+            padding: 15px;
+            padding-top: max(15px, env(safe-area-inset-top));
+            text-align: center;
+            font-weight: 800;
+            font-size: 1.2rem;
+            letter-spacing: 1px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 1000;
         }
-        header h1 { margin: 0; font-size: 1.1rem; font-weight: 700; letter-spacing: 1px; }
-        #map { flex: 1; width: 100%; z-index: 1; }
-        .control-panel {
-            background: var(--card-bg); padding: 20px;
-            padding-bottom: calc(20px + env(safe-area-inset-bottom));
-            border-top-left-radius: 20px; border-top-right-radius: 20px;
-            box-shadow: 0 -4px 15px rgba(0,0,0,0.1); z-index: 1001;
-            text-align: center; position: relative;
+
+        /* 地圖全螢幕 */
+        #map {
+            flex: 1;
+            width: 100%;
+            z-index: 1;
         }
-        .scan-btn {
-            background-color: var(--primary-color); color: white;
-            border: none; border-radius: 50px;
-            padding: 15px 40px; font-size: 1.1rem; font-weight: bold;
-            cursor: pointer; box-shadow: 0 4px 15px rgba(255, 90, 95, 0.4);
-            transition: transform 0.1s; width: 80%; max-width: 300px;
+
+        /* --- 底部浮動卡片 (模仿原版 UI) --- */
+        .bottom-panel {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            background: white;
+            border-top-left-radius: 24px;
+            border-top-right-radius: 24px;
+            box-shadow: 0 -5px 25px rgba(0,0,0,0.1);
+            z-index: 1002;
+            padding: 25px 20px;
+            padding-bottom: max(25px, env(safe-area-inset-bottom));
+            transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
-        .scan-btn:active { transform: scale(0.96); }
-        .test-btn {
-            background: transparent; border: 1px solid #ccc;
-            color: #888; font-size: 0.8rem; padding: 5px 10px;
-            border-radius: 20px; margin-top: 15px; cursor: pointer;
+
+        /* 結果顯示區 */
+        .result-content {
+            width: 100%;
+            text-align: center;
+            display: none; /* 預設隱藏 */
+            animation: fadeIn 0.5s ease;
         }
-        #result-card { display: none; margin-bottom: 15px; }
-        .res-name { font-size: 1.5rem; font-weight: 800; color: #333; margin: 10px 0 5px; }
-        .res-type { font-size: 0.9rem; color: #666; margin-bottom: 15px; display: block; }
-        .nav-btn {
-            background-color: #4285F4; color: white; text-decoration: none;
-            padding: 12px 25px; border-radius: 12px; font-size: 1rem;
-            display: inline-block; font-weight: bold;
+
+        .res-title {
+            font-size: 1.6rem;
+            font-weight: 800;
+            color: var(--text-dark);
+            margin-bottom: 5px;
+            line-height: 1.3;
         }
-        .radar-spinner {
-            display: none; width: 50px; height: 50px;
-            background-color: var(--primary-color); border-radius: 50%;
-            margin: 0 auto 20px;
-            animation: pulse-ring 1.25s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+
+        .res-tag {
+            display: inline-block;
+            background: #ffebeb;
+            color: var(--primary);
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            margin-bottom: 15px;
+            font-weight: 600;
         }
-        @keyframes pulse-ring {
-            0% { transform: scale(0.33); opacity: 1; }
-            80%, 100% { transform: scale(2); opacity: 0; }
+
+        .action-row {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 10px;
+            width: 100%;
         }
-        #status-text { color: #666; font-size: 0.9rem; margin-top: 10px; }
+
+        /* 通用按鈕樣式 */
+        .btn {
+            border: none;
+            border-radius: 50px;
+            padding: 14px 24px;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+        }
+        .btn:active { transform: scale(0.95); }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+            box-shadow: 0 4px 15px rgba(255, 89, 95, 0.4);
+            flex: 2;
+        }
+
+        .btn-outline {
+            background: white;
+            border: 2px solid var(--primary);
+            color: var(--primary);
+            flex: 1;
+        }
+
+        .btn-google {
+            background: #4285F4;
+            color: white;
+            flex: 1;
+        }
+
+        /* 搜尋設定區 (距離滑桿) */
+        .search-controls {
+            width: 100%;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .slider-container {
+            width: 80%;
+            margin: 10px auto;
+            position: relative;
+        }
+        input[type=range] {
+            width: 100%;
+            accent-color: var(--primary);
+        }
+        .range-label {
+            font-size: 0.9rem;
+            color: var(--text-gray);
+            margin-bottom: 5px;
+            display: block;
+        }
+
+        /* --- 動畫雷達 --- */
+        .radar-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255,255,255,0.8);
+            z-index: 1003;
+            display: none; /* 預設隱藏 */
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            backdrop-filter: blur(5px);
+        }
+        .radar-circle {
+            width: 80px; height: 80px;
+            background: var(--primary);
+            border-radius: 50%;
+            position: relative;
+            animation: pulse 1.5s infinite;
+        }
+        .radar-circle::after {
+            content: '';
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100%; height: 100%;
+            border-radius: 50%;
+            border: 2px solid white;
+            animation: ripple 1.5s infinite;
+        }
+        .loading-text {
+            margin-top: 20px;
+            font-weight: 600;
+            color: var(--text-dark);
+        }
+
+        @keyframes pulse { 0% { transform: scale(0.95); } 50% { transform: scale(1.05); } 100% { transform: scale(0.95); } }
+        @keyframes ripple { 0% { width: 0; height: 0; opacity: 1; } 100% { width: 200px; height: 200px; opacity: 0; } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* 自定義 Leaflet 標記 */
+        .custom-pin {
+            background-color: var(--primary);
+            width: 36px; height: 36px;
+            border-radius: 50% 50% 50% 0;
+            transform: rotate(-45deg);
+            border: 3px solid white;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.3);
+            display: flex; justify-content: center; align-items: center;
+        }
+        .custom-pin::after {
+            content: '';
+            width: 14px; height: 14px;
+            background: white;
+            border-radius: 50%;
+        }
+        .custom-pin-icon {
+            transform: rotate(45deg); /* 把 icon 轉回來 */
+        }
     </style>
 </head>
 <body>
 
     <header>
-        <h1><i class="fas fa-utensils"></i> Food Radar</h1>
+        FOOD RADAR
     </header>
 
     <div id="map"></div>
 
-    <div class="control-panel">
-        <div id="result-card">
-            <div class="res-name" id="r-name">餐廳名稱</div>
-            <span class="res-type" id="r-type">類別</span>
-            <div>
-                <a href="#" id="nav-link" class="nav-btn" target="_blank">
-                    <i class="fas fa-location-arrow"></i> 導航去
-                </a>
+    <div class="bottom-panel" id="panel">
+        
+        <div id="search-ui" class="search-controls">
+            <span class="range-label">搜尋半徑: <span id="range-val">1000</span> 公尺</span>
+            <div class="slider-container">
+                <input type="range" id="radius-slider" min="300" max="3000" step="100" value="1000">
+            </div>
+            
+            <button class="btn btn-primary" onclick="startRadar()" style="width:100%; margin-top:10px;">
+                <i class="fas fa-search-location"></i> 開始搜尋
+            </button>
+            
+            <div style="margin-top:10px;">
+                <button class="btn btn-outline" onclick="testMode()" style="font-size:0.8rem; padding:8px 15px; border:1px solid #ddd; color:#999;">
+                    <i class="fas fa-bug"></i> 測試模式
+                </button>
             </div>
         </div>
 
-        <div class="radar-spinner" id="loader"></div>
-
-        <div id="action-area">
-            <button class="scan-btn" id="start-btn" onclick="startProcess('gps')">
-                <i class="fas fa-search-location"></i> 搜尋附近美食
-            </button>
-            <div id="status-text">點擊按鈕隨機搜尋 (1km 範圍)</div>
-            <button class="test-btn" onclick="startProcess('test')">無法定位？按此測試</button>
+        <div id="result-ui" class="result-content">
+            <div class="res-tag" id="r-type">餐廳類型</div>
+            <div class="res-title" id="r-name">餐廳名稱</div>
+            
+            <div class="action-row">
+                <button class="btn btn-outline" onclick="resetSearch()">
+                    <i class="fas fa-redo"></i> 重抽
+                </button>
+                <a id="nav-btn" href="#" target="_blank" class="btn btn-google" style="text-decoration:none;">
+                    <i class="fas fa-location-arrow"></i> 導航
+                </a>
+            </div>
         </div>
     </div>
 
+    <div class="radar-overlay" id="radar-mask">
+        <div class="radar-circle"></div>
+        <div class="loading-text">正在掃描附近美食...</div>
+    </div>
+
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    
     <script>
-        const map = L.map('map', {zoomControl: false}).setView([23.6, 121], 7);
+        // --- 1. 初始化地圖 ---
+        // 預設中心 (台灣)，樣式使用 CartoDB Voyager (乾淨、現代、類似 Google)
+        const map = L.map('map', { zoomControl: false }).setView([23.6, 121], 7);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-            attribution: '© OSM'
+            attribution: '&copy; OpenStreetMap & Carto'
         }).addTo(map);
 
         let userMarker = null;
         let foodMarker = null;
+        let userLat = 0, userLng = 0;
 
-        function startProcess(mode) {
-            const btn = document.getElementById('start-btn');
-            const loader = document.getElementById('loader');
-            const status = document.getElementById('status-text');
-            const resultCard = document.getElementById('result-card');
+        // 滑桿監聽
+        const slider = document.getElementById('radius-slider');
+        const rangeVal = document.getElementById('range-val');
+        slider.oninput = function() { rangeVal.innerText = this.value; }
 
-            document.getElementById('start-btn').style.display = 'none';
-            document.querySelector('.test-btn').style.display = 'none';
-            resultCard.style.display = 'none';
-            loader.style.display = 'block';
-            status.innerText = "正在定位中...";
+        // --- 2. 核心邏輯 ---
 
-            if (mode === 'test') {
-                // 測試模式：台北車站
-                setTimeout(() => { handleLocationSuccess(25.0478, 121.5170); }, 1000);
-            } else {
-                if (!navigator.geolocation) {
-                    alert("瀏覽器不支援定位"); resetUI(); return;
-                }
-                navigator.geolocation.getCurrentPosition(
-                    (pos) => { handleLocationSuccess(pos.coords.latitude, pos.coords.longitude); },
-                    (err) => { alert("定位失敗！請確認已允許位置權限。"); resetUI(); },
-                    { enableHighAccuracy: true, timeout: 10000 }
-                );
+        function startRadar() {
+            // 顯示載入畫面
+            toggleLoading(true);
+
+            if (!navigator.geolocation) {
+                alert("您的裝置不支援 GPS");
+                toggleLoading(false);
+                return;
             }
+
+            // 取得 GPS
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    userLat = pos.coords.latitude;
+                    userLng = pos.coords.longitude;
+                    handleLocationFound(userLat, userLng);
+                },
+                (err) => {
+                    alert("無法取得位置，請確認瀏覽器權限。\n(或使用測試模式)");
+                    toggleLoading(false);
+                },
+                { enableHighAccuracy: true, timeout: 10000 }
+            );
         }
 
-        function handleLocationSuccess(lat, lng) {
-            document.getElementById('status-text').innerText = "正在掃描附近餐廳...";
+        // 測試模式 (免 GPS)
+        function testMode() {
+            toggleLoading(true);
+            setTimeout(() => {
+                // 模擬台北車站
+                userLat = 25.0478;
+                userLng = 121.5170;
+                handleLocationFound(userLat, userLng);
+            }, 800);
+        }
+
+        function handleLocationFound(lat, lng) {
+            // 在地圖上標示「我」
             map.setView([lat, lng], 16);
-            
             if (userMarker) map.removeLayer(userMarker);
+            
+            // 藍色圓點代表自己
             userMarker = L.circleMarker([lat, lng], {
                 radius: 8, fillColor: "#4285F4", color: "#fff", weight: 3, fillOpacity: 1
             }).addTo(map);
 
-            fetchRestaurants(lat, lng);
+            // 執行 API 搜尋
+            fetchOSMData(lat, lng);
         }
 
-        async function fetchRestaurants(lat, lng) {
-            const radius = 1000;
-            const query = `[out:json][timeout:25];(node["amenity"~"restaurant|fast_food|cafe|food_court"](around:${radius},${lat},${lng});way["amenity"~"restaurant|fast_food|cafe|food_court"](around:${radius},${lat},${lng}););out center;`;
-
+        async function fetchOSMData(lat, lng) {
+            const radius = document.getElementById('radius-slider').value;
+            
+            // Overpass Query: 搜尋 餐廳、速食、咖啡、小吃
+            const query = `
+                [out:json][timeout:25];
+                (
+                  node["amenity"~"restaurant|fast_food|cafe|food_court|bar"](around:${radius},${lat},${lng});
+                  way["amenity"~"restaurant|fast_food|cafe|food_court|bar"](around:${radius},${lat},${lng});
+                );
+                out center;
+            `;
+            
             try {
                 const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
-                const response = await fetch(url);
-                const data = await response.json();
+                const res = await fetch(url);
+                const data = await res.json();
 
                 if (data.elements && data.elements.length > 0) {
-                    const validList = data.elements.filter(e => e.tags && e.tags.name);
+                    // 過濾沒有名字的資料
+                    const validList = data.elements.filter(item => item.tags && item.tags.name);
+                    
                     if (validList.length > 0) {
-                        const randomOne = validList[Math.floor(Math.random() * validList.length)];
-                        showResult(randomOne);
+                        // 隨機選一個
+                        const winner = validList[Math.floor(Math.random() * validList.length)];
+                        
+                        // 模擬「掃描」延遲感，增加儀式感
+                        setTimeout(() => {
+                            showWinner(winner);
+                        }, 1500); 
                     } else {
-                        alert("附近有資料但沒有名稱，請換個地方試試"); resetUI();
+                        throw new Error("No named places");
                     }
                 } else {
-                    alert("方圓 1km 內沒有找到餐廳資料"); resetUI();
+                    alert(`方圓 ${radius} 公尺內找不到餐廳！請擴大範圍試試。`);
+                    toggleLoading(false);
                 }
             } catch (e) {
                 console.error(e);
-                alert("API 連線忙碌中，請稍後再試"); resetUI();
+                alert("附近找不到資料，或是連線忙碌中。");
+                toggleLoading(false);
             }
         }
 
-        function showResult(place) {
-            const pLat = place.lat || place.center.lat;
-            const pLng = place.lon || place.center.lon;
-            const name = place.tags.name;
-            const type = place.tags.cuisine || place.tags.amenity || "餐廳";
-
-            document.getElementById('loader').style.display = 'none';
-            document.getElementById('result-card').style.display = 'block';
-            document.getElementById('status-text').innerText = "找到啦！";
+        function showWinner(place) {
+            toggleLoading(false);
             
+            // 解析資料
+            const lat = place.lat || place.center.lat;
+            const lng = place.lon || place.center.lon;
+            const name = place.tags.name;
+            // 嘗試取得類型 (英文轉中文簡單對應，或直接顯示英文)
+            let typeRaw = place.tags.cuisine || place.tags.amenity;
+            const typeMap = { 'restaurant': '餐廳', 'cafe': '咖啡廳', 'fast_food': '速食', 'food_court': '美食街', 'bar': '酒吧' };
+            const type = typeMap[typeRaw] || typeRaw || "美食";
+
+            // UI 切換
+            document.getElementById('search-ui').style.display = 'none';
+            document.getElementById('result-ui').style.display = 'block';
+
+            // 填入資料
             document.getElementById('r-name').innerText = name;
             document.getElementById('r-type').innerText = type;
-            
-            // 修正後的導航連結 (使用 Google Maps 標準格式)
-            document.getElementById('nav-link').href = `https://www.google.com/maps/dir/?api=1&destination=${pLat},${pLng}`;
 
-            const btn = document.getElementById('start-btn');
-            btn.innerHTML = '<i class="fas fa-redo"></i> 不滿意？再抽一次';
-            btn.style.display = 'inline-block';
-            document.querySelector('.test-btn').style.display = 'inline-block';
+            // 設定導航連結 (使用 Universal Link 格式，手機會自動開地圖 App)
+            const navLink = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+            document.getElementById('nav-btn').href = navLink;
 
+            // 地圖標記
             if (foodMarker) map.removeLayer(foodMarker);
             
-            // 自定義紅色地標
-            const icon = L.divIcon({
-                className: 'custom-icon',
-                html: `<div style="background:#FF5A5F;width:30px;height:30px;border-radius:50%;border:3px solid white;box-shadow:0 2px 5px rgba(0,0,0,0.3);"></div>`,
-                iconSize: [30, 30], iconAnchor: [15, 15]
+            // 自製 CSS Pin (仿 Food Radar 風格)
+            const customIcon = L.divIcon({
+                className: 'custom-pin-wrapper',
+                html: `<div class="custom-pin"></div>`,
+                iconSize: [40, 40],
+                iconAnchor: [20, 38], // 調整錨點讓尖端對準座標
+                popupAnchor: [0, -40]
             });
 
-            foodMarker = L.marker([pLat, pLng], {icon: icon}).addTo(map);
-            map.flyTo([pLat, pLng], 17, {animate: true, duration: 1.5});
+            foodMarker = L.marker([lat, lng], {icon: customIcon}).addTo(map)
+                .bindPopup(`<b>${name}</b>`).openPopup();
+
+            // 飛過去
+            map.flyTo([lat, lng], 17, { duration: 1.5 });
         }
 
-        function resetUI() {
-            document.getElementById('start-btn').style.display = 'inline-block';
-            document.querySelector('.test-btn').style.display = 'inline-block';
-            document.getElementById('loader').style.display = 'none';
-            document.getElementById('status-text').innerText = "點擊按鈕隨機搜尋";
+        function resetSearch() {
+            document.getElementById('result-ui').style.display = 'none';
+            document.getElementById('search-ui').style.display = 'block';
+            map.flyTo([userLat, userLng], 16); // 回到使用者視角
         }
+
+        function toggleLoading(show) {
+            const mask = document.getElementById('radar-mask');
+            mask.style.display = show ? 'flex' : 'none';
+        }
+
+        // 解決 iOS Safari 100vh 問題
+        const setAppHeight = () => {
+            document.body.style.height = window.innerHeight + 'px';
+        }
+        window.addEventListener('resize', setAppHeight);
+        setAppHeight();
+
     </script>
 </body>
 </html>
